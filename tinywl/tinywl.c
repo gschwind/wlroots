@@ -47,6 +47,8 @@ struct tinywl_server {
 	struct wl_listener cursor_axis;
 	struct wl_listener cursor_frame;
 
+	uint32_t cursor_last_msec;
+
 	struct wlr_seat *seat;
 	struct wl_listener new_input;
 	struct wl_listener request_cursor;
@@ -466,9 +468,12 @@ static void server_cursor_motion(struct wl_listener *listener, void *data) {
 	 * special configuration applied for the specific input device which
 	 * generated the event. You can pass NULL for the device if you want to move
 	 * the cursor around without any input. */
-	wlr_cursor_move(server->cursor, event->device,
-			event->delta_x, event->delta_y);
-	process_cursor_motion(server, event->time_msec);
+	if (server->cursor_last_msec != event->time_msec) {
+		server->cursor_last_msec = event->time_msec;
+		wlr_cursor_move(server->cursor, event->device,
+				event->delta_x, event->delta_y);
+		process_cursor_motion(server, event->time_msec);
+	}
 }
 
 static void server_cursor_motion_absolute(
@@ -482,8 +487,12 @@ static void server_cursor_motion_absolute(
 	struct tinywl_server *server =
 		wl_container_of(listener, server, cursor_motion_absolute);
 	struct wlr_event_pointer_motion_absolute *event = data;
-	wlr_cursor_warp_absolute(server->cursor, event->device, event->x, event->y);
-	process_cursor_motion(server, event->time_msec);
+
+	if (server->cursor_last_msec != event->time_msec) {
+		server->cursor_last_msec = event->time_msec;
+		wlr_cursor_warp_absolute(server->cursor, event->device, event->x, event->y);
+		process_cursor_motion(server, event->time_msec);
+	}
 }
 
 static void server_cursor_button(struct wl_listener *listener, void *data) {
@@ -835,6 +844,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	struct tinywl_server server;
+	server.cursor_last_msec = 0;
 	/* The Wayland display is managed by libwayland. It handles accepting
 	 * clients from the Unix socket, manging Wayland globals, and so on. */
 	server.wl_display = wl_display_create();
